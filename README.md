@@ -45,10 +45,10 @@ pytorch-geometric: torch-1.7.0+cu112
 
 # Citation
 
-@article{wang2023low, <br>
-  title={Low-bit Quantization for Deep Graph Neural Networks with Smoothness-aware Message Propagation},
-  author={Wang, Shuang and Eravci, Bahaeddin and Guliyev, Rustam and Ferhatosmanoglu, Hakan},
-  booktitle={Proceedings of the 32nd ACM International Conference on Information and Knowledge Management},
-  pages={2626--2636},
-  year={2023}
+@inproceedings{wang2023low, <br>
+  title={Low-bit Quantization for Deep Graph Neural Networks with Smoothness-aware Message Propagation}, <br>
+  author={Wang, Shuang and Eravci, Bahaeddin and Guliyev, Rustam and Ferhatosmanoglu, Hakan}, <br>
+  booktitle={Proceedings of the 32nd ACM International Conference on Information and Knowledge Management}, <br>
+  pages={2626--2636}, <br>
+  year={2023} <br>
 }
