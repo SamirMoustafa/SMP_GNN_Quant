@@ -55,10 +55,6 @@ pytorch-geometric: torch-1.7.0+cu112
   pages={2626--2636},
   
   year={2023}
+  
 }
-@article{kim2021bert,
-  title={I-BERT: Integer-only BERT Quantization},
-  author={Kim, Sehoon and Gholami, Amir and Yao, Zhewei and Mahoney, Michael W and Keutzer, Kurt},
-  journal={International Conference on Machine Learning (Accepted)},
-  year={2021}
-}
+
