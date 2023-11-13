@@ -45,38 +45,7 @@ pytorch-geometric: torch-1.7.0+cu112
 
 # Citation
 
-@article{wang2023low,
-  title={Low-bit Quantization for Deep Graph Neural Networks with Smoothness-aware Message Propagation},
-  author={Wang, Shuang and Eravci, Bahaeddin and Guliyev, Rustam and Ferhatosmanoglu, Hakan},
-  booktitle={Proceedings of the 32nd ACM International Conference on Information and Knowledge Management},
-  pages={2626--2636},
-  year={2023}
-}
-
-
-# The repository includes the main codes for "Low-bit Quantization for Deep Graph Neural Networks with Smoothness-aware Message Propagation"
-
-### Environment requirement:
-
-Python: 2.8.2
-
-Pytorch: 1.7.0+cu110
-
-pytorch-geometric: torch-1.7.0+cu112
-
-
-### Examples:
- 
-#### Node classification tasks:
->FP32 case:
-
-! python3 main.py --device cpu --qtype FP32  --dataset Cora --lambda_threshold 0.00001 --alpha_threshold 0.1 --random_splits 2 --runs 1 --lr1 0.01 --weight_decay1 0.00001 --dropout 0.8 --K 10 --lambda1 9 --lambda2 9  --prop_mode SMP --epochs 200 
-
-...
-
-# Citation
-
-@article{wang2023low,
+@article{wang2023low, <br>
   title={Low-bit Quantization for Deep Graph Neural Networks with Smoothness-aware Message Propagation},
   author={Wang, Shuang and Eravci, Bahaeddin and Guliyev, Rustam and Ferhatosmanoglu, Hakan},
   booktitle={Proceedings of the 32nd ACM International Conference on Information and Knowledge Management},
