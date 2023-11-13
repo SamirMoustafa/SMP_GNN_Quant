@@ -1,5 +1,16 @@
-# SMP_GNN_Quant
-The repository includes the main codes for "Low-bit Quantization for Deep Graph Neural Networks with Smoothness-aware Message Propagation"
+# scalable_deep_GNN_quantization
+<meta name="robots" content="noindex">
+
+## The repository includes the main codes for "Low-bit Quantization for Deep Graph Neural Networks with Smoothness-aware Message Propagation"
+
+### Envrioment requirement:
+
+Python: 2.8.2
+
+Pytorch: 1.7.0+cu110
+
+pytorch-geometric: torch-1.7.0+cu112
+
 
 ### Examples:
  
@@ -36,11 +47,14 @@ The repository includes the main codes for "Low-bit Quantization for Deep Graph 
 ! python3 main.py --device cpu --lambda_threshold 0.00001 --alpha_threshold 0.1 --qtype INT2 --dataset Cora --random_splits 2 --runs 1 --lr 0.0001 --weight_decay 0.00001 --lr1 0.01 --weight_decay1 0.00001 --dropout 0.5 --K 10 --lambda1 9 --lambda2 9  --prop_mode SMP --epochs 200  --BT_mode SBT
 
 
-# Citation
-@inproceedings{wang2023low,
-  title={Low-bit Quantization for Deep Graph Neural Networks with Smoothness-aware Message Propagation},
-  author={Wang, Shuang and Eravci, Bahaeddin and Guliyev, Rustam and Ferhatosmanoglu, Hakan},
-  booktitle={Proceedings of the 32nd ACM International Conference on Information and Knowledge Management},
-  pages={2626--2636},
-  year={2023}
-}
+#### quantized embeddings for similarity search
+
+> get quantized embeddings
+
+! python3 main.py --device cpu --qtype INT8  --dataset Cora --lambda_threshold $lambda_threshold --alpha_threshold $alpha_threshold --random_splits 2 --runs 1 --lr 0.0001 --weight_decay 0.00001 --lr1 0.01 --weight_decay1 0.00001 --dropout 0.8 --K 10 --lambda1 9 --lambda2 9  --prop_mode SMP --epochs 200 --embedding_quant True
+
+
+> similarity search
+
+! python bitwise_similarity_search.py --dataset_name Cora  --coarser_mode bitiwse --bit_used 2 --query_K 20 --coarser_class_num 10 --M 8 --PQ_code_num 128 --quant_mode INT8 --quant_embedding_path QUANT_EMBEDDING_PATH --dataset_path DATASET_PATH
+
