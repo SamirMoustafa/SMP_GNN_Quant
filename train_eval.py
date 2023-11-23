@@ -1,12 +1,14 @@
 import torch
 import torch.nn.functional as F
 from ogb.nodeproppred import Evaluator
+
 criterion = torch.nn.CrossEntropyLoss()
+
 
 def train(model, data, train_idx, optimizer, embedding_quant=None):
     model.train()
     optimizer.zero_grad()
-    if embedding_quant: 
+    if embedding_quant:
         out = model(data=data)[0][train_idx]
     else:
         out = model(data=data)[train_idx]
@@ -16,23 +18,24 @@ def train(model, data, train_idx, optimizer, embedding_quant=None):
         y = data.y.squeeze(1)[train_idx]  ## for ogb data
     loss = F.nll_loss(out, y)
 
-    loss.backward(retain_graph=True)
+    loss.backward()
     optimizer.step()
     return loss.item()
- 
+
+
 @torch.no_grad()
 def test(model, data, split_idx, embedding_quant=None):
     model.eval()
-    
+
     if embedding_quant:
         out, prop_val = model(data=data)
     else:
         out = model(data=data)
-        
+
     y_pred = out.argmax(dim=-1, keepdim=True)
 
     if len(data.y.shape) == 1:
-        y = data.y.unsqueeze(dim=1) # for non ogb datas
+        y = data.y.unsqueeze(dim=1)  # for non ogb datas
     else:
         y = data.y
 
@@ -49,7 +52,7 @@ def test(model, data, split_idx, embedding_quant=None):
         'y_true': y[split_idx['test']],
         'y_pred': y_pred[split_idx['test']],
     })['acc']
-    
+
     if embedding_quant:
         return train_acc, valid_acc, test_acc, prop_val
     else:
