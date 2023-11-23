@@ -56,14 +56,11 @@ def tensor_dim_slice(tensor, dim, dim_slice):
 # @torch.jit.script
 def packshape(shape, dim: int = -1, mask: int = 0b00000001, dtype=torch.uint8, pack=True):
     dim = dim if dim >= 0 else dim + len(shape)
-    bits, nibble = (
-        8 if dtype is torch.uint8 else 16 if dtype is torch.int16 else 32 if dtype is torch.int32 else 64 if dtype is torch.int64 else 0), (
-        1 if mask == 0b00000001 else 2 if mask == 0b00000011 else 4 if mask == 0b00001111 else 8 if mask == 0b11111111 else 0)
-    # bits = torch.iinfo(dtype).bits # does not JIT compile
+    bits = 8 if dtype is torch.uint8 else 16 if dtype is torch.int16 else 32 if dtype is torch.int32 else 64 if dtype is torch.int64 else 0
+    nibble = 1 if mask == 0b00000001 else 2 if mask == 0b00000011 else 4 if mask == 0b00001111 else 8 if mask == 0b11111111 else 0
     assert nibble <= bits and bits % nibble == 0
     nibbles = bits // nibble
-    shape = (shape[:dim] + (int(math.ceil(shape[dim] / nibbles)),) + shape[1 + dim:]) if pack else (
-                shape[:dim] + (shape[dim] * nibbles,) + shape[1 + dim:])
+    shape = (shape[:dim] + (int(math.ceil(shape[dim] / nibbles)),) + shape[1 + dim:]) if pack else (shape[:dim] + (shape[dim] * nibbles,) + shape[1 + dim:])
     return shape, nibbles, nibble
 
 
@@ -220,7 +217,6 @@ def main():
             store_path = None  # args.store_path
             logger.print_statistics(runs_overall, store_path)
 
-    model_orderDict = collections.OrderedDict()
     if args.save_model:
         if args.qtype is None:
             torch.save(model.state_dict(), PATH)

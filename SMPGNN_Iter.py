@@ -81,10 +81,10 @@ class SMPGNN(torch.nn.Module):
         if not self.embedding_quant:
 
             x = self.lin2(x, training=self.training)[0]
-            x = self.prop(x, adj_t, data=data)
+            x = self.prop(x, adj_t)
         else:
 
-            x = self.prop(x, adj_t, data=data)
+            x = self.prop(x, adj_t)
             prop_val = self.lin2(x, training=self.training)
             x = prop_val[0]
             return F.log_softmax(x, dim=1), prop_val

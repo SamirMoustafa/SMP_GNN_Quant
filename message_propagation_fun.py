@@ -113,7 +113,7 @@ class prop_part_QUANT(MessagePassingQuant):
     def forward(self, x: Tensor,
                 edge_index: Adj,
                 edge_weight: OptTensor = None,
-                data=None) -> Tensor:
+                ) -> Tensor:
         """"""
         if self.K <= 0: return x
 
