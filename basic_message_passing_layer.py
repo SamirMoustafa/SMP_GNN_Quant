@@ -1,11 +1,12 @@
 import inspect
 from collections import OrderedDict
 
-import torch
-import torch_scatter
 from scipy.stats import kurtosis
 from scipy.stats import skew
-from torch.nn import Module
+
+from torch import tensor, is_tensor, zeros
+from torch.nn import Module, Parameter
+import torch_scatter
 
 
 def scatter_(name, src, index, dim=0, dim_size=None):
@@ -23,7 +24,6 @@ def scatter_(name, src, index, dim=0, dim_size=None):
         out[out > 10000] = 0
     return out
 
-
 msg_special_args = {"edge_index", "edge_index_i", "edge_index_j", "size", "size_i", "size_j"}
 
 aggr_special_args = {"index", "dim_size"}
@@ -35,7 +35,9 @@ REQUIRED_QUANTIZER_KEYS = ["aggregate", "message", "update_q"]
 
 
 class MessagePassingQuant(Module):
-    """Modified from the PyTorch Geometric message passing class"""
+    """
+    Modified from the PyTorch Geometric message passing class
+    """
 
     def __init__(self,
                  aggr="add",
@@ -72,30 +74,22 @@ class MessagePassingQuant(Module):
         self.__args__ = set().union(msg_args, aggr_args, update_args)
 
         assert message_group_quantizers is not None
-        self.messagegroup_quantizers = message_group_quantizers
+        self.message_group_quantizers = message_group_quantizers
 
-        self.value_alpha = 1.0
-
-        alpha_message = torch.tensor([self.value_alpha], requires_grad=True)
-        self.alpha_message = torch.nn.Parameter(alpha_message)
-        alpha_aggregate = torch.tensor([self.value_alpha], requires_grad=True)
-        self.alpha_aggregate = torch.nn.Parameter(alpha_aggregate)
-        alpha_update = torch.tensor([self.value_alpha], requires_grad=True)
-        self.alpha_update = torch.nn.Parameter(alpha_update)
+        self.alpha_message = Parameter(tensor([1.0], requires_grad=True))
+        self.alpha_aggregate = Parameter(tensor([1.0], requires_grad=True))
+        self.alpha_update = Parameter(tensor([1.0], requires_grad=True))
 
     def __set_size__(self, size, index, tensor):
-        if not torch.is_tensor(tensor):
+        if not is_tensor(tensor):
             pass
         elif size[index] is None:
             size[index] = tensor.size(self.node_dim)
         elif size[index] != tensor.size(self.node_dim):
-            raise ValueError(
-                (
-                    f"Encountered node tensor with size "
-                    f"{tensor.size(self.node_dim)} in dimension {self.node_dim}, "
-                    f"but expected size {size[index]}."
-                )
-            )
+            raise ValueError(f"Encountered node tensor with size "
+                             f"{tensor.size(self.node_dim)} in dimension {self.node_dim}, "
+                             f"but expected size {size[index]}."
+                             )
 
     def __collect__(self, edge_index, size, kwargs):
         i, j = (0, 1) if self.flow == "target_to_source" else (1, 0)
@@ -118,7 +112,7 @@ class MessagePassingQuant(Module):
                     self.__set_size__(size, 1 - idx, data[1 - idx])
                     data = data[idx]
 
-                if not torch.is_tensor(data):
+                if not is_tensor(data):
                     out[arg] = data
                     continue
 
@@ -155,74 +149,58 @@ class MessagePassingQuant(Module):
             out[key] = data
         return out
 
-    def propagate(self, edge_index, size=None, edge_norm=None, k=None, name=None, **kwargs):
-
+    def propagate(self, edge_index, size=None, k=None, name=None, **kwargs):
         size = [None, None] if size is None else size
         size = [size, size] if isinstance(size, int) else size
-        size = size.tolist() if torch.is_tensor(size) else size
+        size = size.tolist() if is_tensor(size) else size
         size = list(size) if isinstance(size, tuple) else size
         assert isinstance(size, list)
         assert len(size) == 2
         kwargs = self.__collect__(edge_index, size, kwargs)
 
         msg_kwargs = self.__distribute__(self.__msg_params__, kwargs)
-        x_j_std = kwargs['x_j'].data.std()
 
-        temp_kur_skew_list = torch.zeros([6])
+        kur_skew_tensor = zeros([6])
 
-        self.message_val = self.message(**msg_kwargs)
-
-        out = self.messagegroup_quantizers[name][k]["message"](self.message_val, custom_alpha=self.alpha_message,
-                                                               training=self.training)
-
-        kurt_val = kurtosis(out[0].data.view(-1).cpu(), fisher=False)
-        skew_val = (skew(out[0].data.view(-1).cpu()))
-        temp_kur_skew_list[0] = kurt_val
-        temp_kur_skew_list[1] = skew_val
-
-        if type(out) == tuple:
-            out = out[0]
-        self.message_q = out.clone()
-
-        aggr_kwargs = self.__distribute__(self.__aggr_params__, kwargs)
-        aggre_std = out.data.std()
-
-        self.aggregate_val = self.aggregate(out, **aggr_kwargs)
-
-        out = self.messagegroup_quantizers[name][k]["aggregate"](self.aggregate_val, custom_alpha=self.alpha_aggregate,
-                                                                 training=self.training)
-
-        kurt_val = kurtosis(out[0].data.view(-1).cpu(), fisher=False)
-        skew_val = (skew(out[0].data.view(-1).cpu()))
-        temp_kur_skew_list[2] = kurt_val
-        temp_kur_skew_list[3] = skew_val
-
-        if type(out) == tuple:
-            out = out[0]
-
-        self.aggregate_q = out.clone()
-
-        update_std = out.data.std()
-
-        update_kwargs = self.__distribute__(self.__update_params__, kwargs)
-        self.update_val = self.update(out, **update_kwargs)
-
-        out = self.messagegroup_quantizers[name][k]["update_q"](self.update_val, custom_alpha=self.alpha_update,
+        out = self.message(**msg_kwargs)
+        out = self.message_group_quantizers[name][k]["message"](out,
+                                                                custom_alpha=self.alpha_message,
                                                                 training=self.training)
 
         kurt_val = kurtosis(out[0].data.view(-1).cpu(), fisher=False)
         skew_val = (skew(out[0].data.view(-1).cpu()))
-        temp_kur_skew_list[4] = kurt_val
-        temp_kur_skew_list[5] = skew_val
+        kur_skew_tensor[0] = kurt_val
+        kur_skew_tensor[1] = skew_val
+
+        aggr_kwargs = self.__distribute__(self.__aggr_params__, kwargs)
+        out = out[0] if isinstance(out, tuple) else out
+        out = self.aggregate(out, **aggr_kwargs)
+        out = self.message_group_quantizers[name][k]["aggregate"](out,
+                                                                  custom_alpha=self.alpha_aggregate,
+                                                                  training=self.training)
+
+        kurt_val = kurtosis(out[0].data.view(-1).cpu(), fisher=False)
+        skew_val = (skew(out[0].data.view(-1).cpu()))
+        kur_skew_tensor[2] = kurt_val
+        kur_skew_tensor[3] = skew_val
+
+        update_kwargs = self.__distribute__(self.__update_params__, kwargs)
+        out = self.update(out, **update_kwargs)
+        out = out[0] if isinstance(out, tuple) else out
+        out = self.message_group_quantizers[name][k]["update_q"](out,
+                                                                 custom_alpha=self.alpha_update,
+                                                                 training=self.training)
+
+        kurt_val = kurtosis(out[0].data.view(-1).cpu(), fisher=False)
+        skew_val = (skew(out[0].data.view(-1).cpu()))
+        kur_skew_tensor[4] = kurt_val
+        kur_skew_tensor[5] = skew_val
 
         scale = out[1]
-        zero_point = out[2]
-        if type(out) == tuple:
-            out = out[0]
 
-        self.update_q = out.clone()
+        out = out[0] if isinstance(out, tuple) else out
 
-        return out, scale, temp_kur_skew_list
+        return out, scale, kur_skew_tensor
 
     def message(self, x_j, edge_weight):
         return edge_weight.view(-1, 1) * x_j

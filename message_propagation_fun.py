@@ -68,13 +68,15 @@ class prop_part_QUANT(MessagePassingQuant):
                  cached: bool = False,
                  add_self_loops: bool = True,
                  normalize: bool = True,
-                 oriedge_index=None,
+                 original_edge_index=None,
                  prop_mode=None,
                  dataName=None,
                  qtype=False,
                  message_group_quantizers=None,
                  eta_lambda=None,
-                 alpha_threshold=None, finalout_quantizer=None, embedding_quant=False,
+                 alpha_threshold=None,
+                 finalout_quantizer=None,
+                 embedding_quant=False,
                  **kwargs):
 
         super(prop_part_QUANT, self).__init__(aggr='add', message_group_quantizers=message_group_quantizers, **kwargs)
@@ -84,8 +86,7 @@ class prop_part_QUANT(MessagePassingQuant):
         self.L21 = L21
         self.dropout = dropout
         self.cached = cached
-        torch.manual_seed(1234567)
-        assert add_self_loops == True and normalize == True, ''
+        assert add_self_loops == True and normalize == True, "add_self_loops and normalize should be True"
         self.add_self_loops = add_self_loops
         self.normalize = normalize
         self.dataName = dataName
@@ -93,7 +94,7 @@ class prop_part_QUANT(MessagePassingQuant):
         self._cached_inc = None
 
         self.prop_mode = prop_mode
-        self.oriedge_index = oriedge_index
+        self.original_edge_index = original_edge_index
 
         self.eta_lambda = eta_lambda
         self.alpha_threshold = alpha_threshold
@@ -110,12 +111,14 @@ class prop_part_QUANT(MessagePassingQuant):
         self._cached_adj_t = None
         self._cached_inc = None
 
-    def forward(self, x: Tensor,
+    def forward(self,
+                x: Tensor,
                 edge_index: Adj,
                 edge_weight: OptTensor = None,
-                data=None) -> Tensor:
+                ) -> Tensor:
         """"""
-        if self.K <= 0: return x
+        if self.K <= 0:
+            return x
 
         assert isinstance(edge_index, SparseTensor), "Only support SparseTensor now"
         assert edge_weight is None, "edge_weight is not supported yet, but it can be extented to weighted case"
@@ -150,7 +153,7 @@ class prop_part_QUANT(MessagePassingQuant):
                 edge_index = cache
 
         dense_edge_index = edge_index.to_dense()
-        self.edge_weight_transf = dense_edge_index[self.oriedge_index[0], self.oriedge_index[1]]
+        self.edge_weight_transf = dense_edge_index[self.original_edge_index[0], self.original_edge_index[1]]
 
         hh = x
         if self.prop_mode == "EMP":
@@ -167,22 +170,22 @@ class prop_part_QUANT(MessagePassingQuant):
         self.mu = self.lambda1
 
         dense_edge_index = edge_index.to_dense()
-        edge_weight_transf = dense_edge_index[self.oriedge_index[0], self.oriedge_index[0]]
+        edge_weight_transf = dense_edge_index[self.original_edge_index[0], self.original_edge_index[0]]
 
         eta_H = 0.1
         eta_s1 = 0.00001
         for k in range(K):
             layer_rep = (1 - (1 + self.mu) * eta_H) * x
 
-            layer_rep_prop, _, _ = self.propagate(self.oriedge_index, x=x, edge_weight=self.edge_weight_transf,
+            layer_rep_prop, _, _ = self.propagate(self.original_edge_index, x=x, edge_weight=self.edge_weight_transf,
                                                   size=None, k=k, name="prop")
 
             sub_layer_rep = layer_rep + self.mu * eta_H * layer_rep_prop + eta_H * hh
 
             gap_rep = (sub_layer_rep - x)
 
-            gap_rep_prop, _, _ = self.propagate(self.oriedge_index, x=gap_rep, edge_weight=self.edge_weight_transf,
-                                                size=None, k=k, name="gap_prop")
+            gap_rep_prop, _, _ = self.propagate(self.original_edge_index, x=gap_rep,
+                                                edge_weight=self.edge_weight_transf, size=None, k=k, name="gap_prop")
 
             y = sub_layer_rep + 2 * eta_H * lambda_list * (gap_rep_prop)
 
@@ -197,7 +200,7 @@ class prop_part_QUANT(MessagePassingQuant):
             num_edge = edge_NUM[0]
 
             lambda_list = lambda_list + self.eta_lambda * (
-                        self.alpha_threshold * num_edge - s1_list * s1_list - trace_val_g)
+                    self.alpha_threshold * num_edge - s1_list * s1_list - trace_val_g)
 
             x = y
             x = F.dropout(x, p=self.dropout, training=self.training)
@@ -228,9 +231,10 @@ class prop_part_QUANT(MessagePassingQuant):
 
             if lambda2 > 0:
                 dense_edge_index = edge_index.to_dense()
-                edge_weight_transf = dense_edge_index[self.oriedge_index[0], self.oriedge_index[0]]
+                edge_weight_transf = dense_edge_index[self.original_edge_index[0], self.original_edge_index[0]]
 
-                temp_prop_val, _, _ = self.propagate(self.oriedge_index, x=x, edge_weight=edge_weight_transf, size=None,
+                temp_prop_val, _, _ = self.propagate(self.original_edge_index, x=x, edge_weight=edge_weight_transf,
+                                                     size=None,
                                                      k=k, name="prop")
 
                 y = gamma * hh + (1 - gamma) * temp_prop_val
