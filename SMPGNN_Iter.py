@@ -81,10 +81,10 @@ class SMPGNN(torch.nn.Module):
         if not self.embedding_quant:
 
             x = self.lin2(x, training=self.training)[0]
-            x = self.prop(x, adj_t)
+            x = self.prop(x, adj_t, data=data)
         else:
 
-            x = self.prop(x, adj_t)
+            x = self.prop(x, adj_t, data=data)
             prop_val = self.lin2(x, training=self.training)
             x = prop_val[0]
             return F.log_softmax(x, dim=1), prop_val
@@ -106,14 +106,16 @@ def get_model(args, data, original_dataset, datasetName, eta_lambda=None, alpha_
         quantizers = make_messagequantizers(args.qtype, datasetName, args.prop_mode, BT_mode=args.BT_mode)
         quantizers_list['prop'] = ModuleList([quantizers]) if i == 0 else quantizers_list['prop'].append(quantizers)
         quantizers = make_messagequantizers(args.qtype, datasetName, args.prop_mode, BT_mode=args.BT_mode)
-        quantizers_list['gap_prop'] = ModuleList([quantizers]) if i == 0 else quantizers_list['gap_prop'].append(quantizers)
+        quantizers_list['gap_prop'] = ModuleList([quantizers]) if i == 0 else quantizers_list['gap_prop'].append(
+            quantizers)
     quantizers_list = quantizers_list.to(data.x.device)
-    out_quantizer = make_finalquantizers(args.qtype, datasetName, args.prop_mode, BT_mode=args.BT_mode).to(data.x.device)
+    out_quantizer = make_finalquantizers(args.qtype, datasetName, args.prop_mode, BT_mode=args.BT_mode).to(
+        data.x.device)
     prop = prop_part_QUANT(K=args.K,
                            lambda1=args.lambda1,
                            lambda2=args.lambda2,
                            cached=True,
-                           original_edge_index=edge_index,
+                           oriedge_index=edge_index,
                            prop_mode=args.prop_mode,
                            dataName=datasetName,
                            qtype=args.qtype,
