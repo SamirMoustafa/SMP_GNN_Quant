@@ -33,7 +33,7 @@ class Logger(object):
         assert run >= 0 and run < len(self.results)
         self.results[run].append(result)
 
-    def print_statistics(self, run=None, store_path=None):
+    def print_statistics(self, run=None):
         if run is not None:
             result = 100 * torch.tensor(self.results[run])
 
@@ -53,13 +53,6 @@ class Logger(object):
             print(f'Highest Valid: {result[:, 1].max():.2f}')
             print(f'  Final Train: {result[argmax, 0]:.2f}')
             print(f'   Final Test: {result[argmax, 2]:.2f}')
-
-            final_result_str = "Run " + str(run) + ", Highest Train:" + str(
-                result[:, 0].max()) + ",Highest Valid: " + str(result[:, 1].max()) + ", Final Train:" + str(
-                result[argmax, 0]) + ", Final Test:" + str(result[argmax, 2])
-        #             with open(store_path, 'a') as f:
-        #                 f.write(final_result_str+"\n")
-
         else:
             result = 100 * torch.tensor(self.results)
 

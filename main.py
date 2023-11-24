@@ -1,5 +1,28 @@
+def seed_everything(seed):
+    import os
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+    import random
+    random.seed(seed)
+
+    import numpy as np
+    np.random.seed(seed)
+
+    import torch
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    from torch_geometric import seed_everything
+    seed_everything(seed)
+
+
+seed_everything(42)
+
+
 import argparse
-import collections
 import random
 
 import math
@@ -28,7 +51,7 @@ def parse_args():
     parser.add_argument('--random_splits', type=int, default=0, help='default: fix split')
 
     parser.add_argument('--seed', type=int, default=1234567890)
-    parser.add_argument('--K', type=int, default=10)
+    parser.add_argument('--number_of_layers', type=int, default=10)
     parser.add_argument('--lambda1', type=float, default=3)
     parser.add_argument('--lambda2', type=float, default=3)
     parser.add_argument('--prop_mode', type=str, default=None)
@@ -193,7 +216,7 @@ def main():
                         read_data = prop_val[0].detach()
                         scale = prop_val[1].detach()
                         zero_point = prop_val[2].detach()
-                        quant_embedding = ((read_data) * (1 / scale) + zero_point).round().numpy().astype(np.uint8)
+                        quant_embedding = ((read_data) * (1 / scale) + zero_point).round().cpu().numpy().astype(np.uint8)
                         quant_embedding = torch.from_numpy(quant_embedding)
                         dtype = torch.uint8
                         if args.qtype == "INT2":
@@ -203,7 +226,7 @@ def main():
                         if args.qtype == "INT8":
                             nbits = 8
                         mask = (1 << nbits) - 1
-                        bit_reprsentation = packbits(read_data, mask=mask)
+                        # bit_reprsentation = packbits(read_data, mask=mask)
 
                         embedding_store_path = args.dataset + "_" + str(args.qtype) + "_store_embedding.plt"
                         torch.save(quant_embedding, embedding_store_path)
@@ -215,7 +238,7 @@ def main():
         if args.log_steps > 0:
             print(print(f'Split: {split + 1:02d}, 'f'Run: {run + 1:02d}'))
             store_path = None  # args.store_path
-            logger.print_statistics(runs_overall, store_path)
+            logger.print_statistics(runs_overall)
 
     if args.save_model:
         if args.qtype is None:

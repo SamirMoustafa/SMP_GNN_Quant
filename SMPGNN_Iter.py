@@ -83,12 +83,10 @@ class SMPGNN(torch.nn.Module):
             x = self.lin2(x, training=self.training)[0]
             x = self.prop(x, adj_t)
         else:
-
             x = self.prop(x, adj_t)
             prop_val = self.lin2(x, training=self.training)
             x = prop_val[0]
             return F.log_softmax(x, dim=1), prop_val
-        #             save the quantized embedding for similarity search
 
         return F.log_softmax(x, dim=1)
 
@@ -102,7 +100,7 @@ def get_model(args, data, original_dataset, datasetName, eta_lambda=None, alpha_
     quantizers_list['prop'] = ParameterDict()
     quantizers_list['gap_prop'] = ParameterDict()
 
-    for i in range(args.K):
+    for i in range(args.number_of_layers):
         quantizers = make_messagequantizers(args.qtype, datasetName, args.prop_mode, BT_mode=args.BT_mode)
         quantizers_list['prop'] = ModuleList([quantizers]) if i == 0 else quantizers_list['prop'].append(quantizers)
         quantizers = make_messagequantizers(args.qtype, datasetName, args.prop_mode, BT_mode=args.BT_mode)
@@ -111,18 +109,17 @@ def get_model(args, data, original_dataset, datasetName, eta_lambda=None, alpha_
     quantizers_list = quantizers_list.to(data.x.device)
     out_quantizer = make_finalquantizers(args.qtype, datasetName, args.prop_mode, BT_mode=args.BT_mode).to(
         data.x.device)
-    prop = prop_part_QUANT(K=args.K,
+    prop = prop_part_QUANT(number_of_layers=args.number_of_layers,
                            lambda1=args.lambda1,
                            lambda2=args.lambda2,
                            cached=True,
-                           oriedge_index=edge_index,
+                           original_edge_index=edge_index,
                            prop_mode=args.prop_mode,
-                           dataName=datasetName,
                            qtype=args.qtype,
                            message_group_quantizers=quantizers_list,
                            eta_lambda=eta_lambda,
                            alpha_threshold=alpha_threshold,
-                           finalout_quantizer=out_quantizer,
+                           final_out_quantizer=out_quantizer,
                            embedding_quant=args.embedding_quant)
 
     model = Model(in_channels=data.num_features,
