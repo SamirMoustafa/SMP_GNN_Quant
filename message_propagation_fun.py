@@ -1,9 +1,9 @@
 from typing import Optional
 
 import torch.nn.functional as F
-from torch import (Tensor, arange, cat, ones, eye, manual_seed, tensor, zeros, nonzero, clamp, norm,
-                   matmul as torch_matmul, abs as torch_abs, sum as torch_sum)
 from torch.nn import Parameter
+from torch import (Tensor, arange, cat, ones, eye, tensor, zeros, nonzero, clamp, norm,
+                   matmul as torch_matmul, abs as torch_abs, sum as torch_sum)
 
 from torch_geometric.nn.conv.gcn_conv import gcn_norm
 from torch_geometric.typing import Adj, OptTensor
@@ -27,14 +27,6 @@ def get_inc(edge_index):
 
 
 def inc_norm(inc, edge_index):
-    edge_index = fill_diag(edge_index, 1.0)  ## add self loop to avoid 0 degree node
-    deg = torch_sparse_sum(edge_index, dim=1)
-    deg_inv_sqrt = deg.pow(-0.5)
-    inc = torch_sparse_mul(inc, deg_inv_sqrt.view(1, -1))  ## col-wise
-    return inc
-
-
-def real_inc_norm(inc, edge_index):
     edge_index = fill_diag(edge_index, 1.0)  ## add self loop to avoid 0 degree node
     deg = torch_sparse_sum(edge_index, dim=1)
     deg_inv_sqrt = deg.pow(-0.5)
@@ -75,7 +67,6 @@ class prop_part_QUANT(MessagePassingQuant):
                  embedding_quant=False,
                  **kwargs):
         super(prop_part_QUANT, self).__init__(aggr='add', message_group_quantizers=message_group_quantizers, **kwargs)
-        manual_seed(1234567)
         assert add_self_loops == True and normalize == True, "add_self_loops and normalize should be True"
         self.number_of_layers = number_of_layers
         self.lambda1 = lambda1

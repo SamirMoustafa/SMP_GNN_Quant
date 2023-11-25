@@ -23,7 +23,6 @@ seed_everything(42)
 
 
 import argparse
-import random
 
 import math
 import numpy as np
@@ -41,29 +40,26 @@ def parse_args():
     parser.add_argument('--dataset', type=str, default='Cora')
     parser.add_argument('--hidden_channels', type=int, default=64)
     parser.add_argument('--dropout', type=float, default=0.5)
-    parser.add_argument('--weight_decay', type=float, default=0.0005)
-    parser.add_argument('--lr', type=float, default=0.01)
-    parser.add_argument('--weight_decay1', type=float, default=0.0005)
+    parser.add_argument('--weight_decay', type=float, default=1e-05)
+    parser.add_argument('--lr', type=float, default=0.0001)
+    parser.add_argument('--weight_decay1', type=float, default=1e-05)
     parser.add_argument('--lr1', type=float, default=0.01)
     parser.add_argument('--epochs', type=int, default=200)
-    parser.add_argument('--runs', type=int, default=10)
+    parser.add_argument('--runs', type=int, default=1)
     parser.add_argument('--normalize_features', type=str2bool, default=True)
-    parser.add_argument('--random_splits', type=int, default=0, help='default: fix split')
 
-    parser.add_argument('--seed', type=int, default=1234567890)
     parser.add_argument('--number_of_layers', type=int, default=10)
-    parser.add_argument('--lambda1', type=float, default=3)
-    parser.add_argument('--lambda2', type=float, default=3)
-    parser.add_argument('--prop_mode', type=str, default=None)
-    parser.add_argument('--device', type=str, default='cuda:0')
-    parser.add_argument('--qtype', type=str, default=None)
-    parser.add_argument("--symmetric", type=bool, default=False)
-    parser.add_argument('--BT_mode', type=str, default=None)
+    parser.add_argument('--lambda1', type=float, default=9)
+    parser.add_argument('--lambda2', type=float, default=9)
+    parser.add_argument('--prop_mode', type=str, default="SMP")
+    parser.add_argument('--device', type=str, default='cuda')
+    parser.add_argument('--qtype', type=str, default="INT2")
+    parser.add_argument('--BT_mode', type=str, default="SBT")
 
     parser.add_argument('--embedding_quant', type=bool, default=False)
 
-    parser.add_argument('--lambda_threshold', type=float, default=0)
-    parser.add_argument('--alpha_threshold', type=float, default=0)
+    parser.add_argument('--lambda_threshold', type=float, default=0.00001)
+    parser.add_argument('--alpha_threshold', type=float, default=0.2)
 
     parser.add_argument("--save_model", type=bool, default=False)
 
@@ -141,27 +137,11 @@ def main():
     args = parse_args()
     print(args)
 
-    if args.seed is not None:
-        random.seed(args.seed)
-        torch.manual_seed(args.seed)
-
     device = args.device
-
-    if args.random_splits > 0:
-        random_split_num = args.random_splits
-        print(f'random split {random_split_num} times and each for {args.runs} runs')
-    else:
-        random_split_num = 1
-        print(f'fix split and run {args.runs} times')
-
-    logger = Logger(args.runs * random_split_num)
-
-    data_random_split = {}
 
     lambda_threshold = args.lambda_threshold
     alpha_threshold = args.alpha_threshold
 
-    split = random_split_num - 1
     original_dataset, dataset, data, split_idx = get_dataset(args.dataset, args.normalize_features)
 
     train_idx = split_idx['train']
@@ -169,12 +149,11 @@ def main():
     if not isinstance(data.adj_t, torch.Tensor):
         data.adj_t = data.adj_t.to_symmetric()
 
-    logger = Logger(args.runs * random_split_num)
+    logger = Logger(args.runs + 1)
     test_max_accu = 0.0
     for run in range(args.runs):
-        runs_overall = split * args.runs + run
-        model = get_model(args, data, original_dataset, args.dataset, eta_lambda=lambda_threshold,
-                          alpha_threshold=alpha_threshold)
+        runs_overall = args.runs + run
+        model = get_model(args, data, original_dataset, args.dataset, eta_lambda=lambda_threshold, alpha_threshold=alpha_threshold)
         model = model.to(device)
 
         model.reset_parameters()
@@ -195,8 +174,7 @@ def main():
             args.current_epoch = epoch
             if args.embedding_quant:
                 loss = train(model, data, train_idx, optimizer, embedding_quant=args.embedding_quant)
-                train_acc, valid_acc, test_acc, prop_val = test(model, data, split_idx,
-                                                                embedding_quant=args.embedding_quant)
+                train_acc, valid_acc, test_acc, prop_val = test(model, data, split_idx, embedding_quant=args.embedding_quant)
                 result = train_acc, valid_acc, test_acc
 
             else:
@@ -208,8 +186,8 @@ def main():
                 if epoch % args.log_steps == 0:
                     train_acc, valid_acc, test_acc = result
                 if epoch % 1 == 0:
-                    print(f'Split: {split + 1:02d}, 'f'Run: {run + 1:02d}, 'f'Epoch: {epoch:02d}, 'f'Loss: {loss:.4f}, '
-                          f'Train: {100 * train_acc:.2f}%, 'f'Valid: {100 * valid_acc:.2f}% 'f'Test: {100 * test_acc:.2f}%')
+                    print(f'Run: {run + 1:02d}, Epoch: {epoch:02d}, Loss: {loss:.4f}, '
+                          f'Train: {100 * train_acc:.2f}%, Valid: {100 * valid_acc:.2f}% Test: {100 * test_acc:.2f}%')
                 if test_max_accu < test_acc:
                     test_max_accu = test_acc
                     if args.embedding_quant:
@@ -236,7 +214,7 @@ def main():
                 optimizer.param_groups[1]["lr"] = 0.7 * optimizer.param_groups[1]["lr"]
 
         if args.log_steps > 0:
-            print(print(f'Split: {split + 1:02d}, 'f'Run: {run + 1:02d}'))
+            print(print(f'Run: {run + 1:02d}'))
             store_path = None  # args.store_path
             logger.print_statistics(runs_overall)
 
