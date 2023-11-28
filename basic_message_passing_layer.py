@@ -1,11 +1,11 @@
 import inspect
 from collections import OrderedDict
 
-import torch_scatter
-from scipy.stats import kurtosis
-from scipy.stats import skew
 from torch import tensor, is_tensor, zeros
 from torch.nn import Module, Parameter
+from torch.nn import functional as F
+
+import torch_scatter
 
 
 def scatter_(name, src, index, dim=0, dim_size=None):
@@ -27,11 +27,6 @@ def scatter_(name, src, index, dim=0, dim_size=None):
 msg_special_args = {"edge_index", "edge_index_i", "edge_index_j", "size", "size_i", "size_j"}
 
 aggr_special_args = {"index", "dim_size"}
-
-update_special_args = set([])
-
-# due to a collision with pytorch using the key "update"
-REQUIRED_QUANTIZER_KEYS = ["aggregate", "message", "update_q"]
 
 
 class MessagePassingQuant(Module):
@@ -67,12 +62,12 @@ class MessagePassingQuant(Module):
 
         msg_args = set(self.__msg_params__.keys()) - msg_special_args
         aggr_args = set(self.__aggr_params__.keys()) - aggr_special_args
-        update_args = set(self.__update_params__.keys()) - update_special_args
+        update_args = set(self.__update_params__.keys())
 
         self.__args__ = set().union(msg_args, aggr_args, update_args)
 
         assert message_group_quantizers is not None
-        self.messagegroup_quantizers = message_group_quantizers
+        self.message_group_quantizers = message_group_quantizers
 
         self.alpha_message = Parameter(tensor([1.0], requires_grad=True))
         self.alpha_aggregate = Parameter(tensor([1.0], requires_grad=True))
@@ -154,42 +149,67 @@ class MessagePassingQuant(Module):
         assert isinstance(size, list)
         assert len(size) == 2
 
-        kurtosis_skew_tensor = zeros([6])
         kwargs = self.__collect__(edge_index, size, kwargs)
-
         msg_kwargs = self.__distribute__(self.__msg_params__, kwargs)
 
         out = self.message(**msg_kwargs)
-        out = self.messagegroup_quantizers[name][k]["message"](out,
-                                                               custom_alpha=self.alpha_message,
-                                                               training=self.training)
-
-        kurtosis_skew_tensor[0] = kurtosis(out[0].data.view(-1).cpu(), fisher=False)
-        kurtosis_skew_tensor[1] = skew(out[0].data.view(-1).cpu())
+        out = self.message_group_quantizers[name][k]["message"](out,
+                                                                custom_alpha=self.alpha_message,
+                                                                training=self.training)
 
         out = out[0] if type(out) == tuple else out
         aggr_kwargs = self.__distribute__(self.__aggr_params__, kwargs)
         out = self.aggregate(out, **aggr_kwargs)
-        out = self.messagegroup_quantizers[name][k]["aggregate"](out,
-                                                                 custom_alpha=self.alpha_aggregate,
-                                                                 training=self.training)
-
-        kurtosis_skew_tensor[2] = kurtosis(out[0].data.view(-1).cpu(), fisher=False)
-        kurtosis_skew_tensor[3] = skew(out[0].data.view(-1).cpu())
+        out = self.message_group_quantizers[name][k]["aggregate"](out,
+                                                                  custom_alpha=self.alpha_aggregate,
+                                                                  training=self.training)
 
         out = out[0] if type(out) == tuple else out
         update_kwargs = self.__distribute__(self.__update_params__, kwargs)
         out = self.update(out, **update_kwargs)
-        out = self.messagegroup_quantizers[name][k]["update_q"](out,
-                                                                custom_alpha=self.alpha_update,
-                                                                training=self.training)
+        out = self.message_group_quantizers[name][k]["update_q"](out,
+                                                                 custom_alpha=self.alpha_update,
+                                                                 training=self.training)
 
-        kurtosis_skew_tensor[4] = kurtosis(out[0].data.view(-1).cpu(), fisher=False)
-        kurtosis_skew_tensor[5] = skew(out[0].data.view(-1).cpu())
-
-        scale = out[1]
         out = out[0] if type(out) == tuple else out
-        return out, scale, kurtosis_skew_tensor
+        return out
+
+    def message(self, x_j, edge_weight):
+        raise NotImplementedError("Not implemented yet.")
+
+    def aggregate(self, inputs, index, dim_size):  # pragma: no cover
+        raise NotImplementedError("Not implemented yet.")
+
+    def update(self, inputs):  # pragma: no cover
+        raise NotImplementedError("Not implemented yet.")
+
+
+class GCNConvQuant(MessagePassingQuant):
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 improved=False,
+                 cached=False,
+                 normalize=True,
+                 **kwargs):
+        super(GCNConvQuant, self).__init__(**kwargs)
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.improved = improved
+        self.cached = cached
+        self.normalize = normalize
+        self.weight = Parameter(zeros((in_channels, out_channels), requires_grad=True))
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        self.weight.data.normal_(0, 0.01)
+
+    def forward(self, x, edge_index, edge_weight=None, size=None, name=None, k=None):
+        """"""
+        x = self.propagate(edge_index, size=size, x=x, edge_weight=edge_weight, name=name, k=k)
+        # x = x @ self.weight
+        return x
 
     def message(self, x_j, edge_weight):
         return edge_weight.view(-1, 1) * x_j
@@ -199,3 +219,6 @@ class MessagePassingQuant(Module):
 
     def update(self, inputs):  # pragma: no cover
         return inputs
+
+    def __repr__(self):
+        return "{}({}, {})".format(self.__class__.__name__, self.in_channels, self.out_channels)

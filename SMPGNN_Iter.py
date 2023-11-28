@@ -109,7 +109,10 @@ def get_model(args, data, original_dataset, datasetName, eta_lambda=None, alpha_
     quantizers_list = quantizers_list.to(data.x.device)
     out_quantizer = make_finalquantizers(args.qtype, datasetName, args.prop_mode, BT_mode=args.BT_mode).to(
         data.x.device)
-    prop = prop_part_QUANT(number_of_layers=args.number_of_layers,
+    prop = prop_part_QUANT(in_channels=data.num_features,
+                           hidden_channels=args.hidden_channels,
+                           out_channels=len(data.y.unique()),
+                           number_of_layers=args.number_of_layers,
                            lambda1=args.lambda1,
                            lambda2=args.lambda2,
                            cached=True,

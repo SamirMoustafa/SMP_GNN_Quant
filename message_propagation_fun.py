@@ -1,7 +1,7 @@
 from typing import Optional
 
 import torch.nn.functional as F
-from torch.nn import Parameter
+from torch.nn import Parameter, Module, ModuleList
 from torch import (Tensor, arange, cat, ones, eye, tensor, zeros, nonzero, clamp, norm,
                    matmul as torch_matmul, abs as torch_abs, sum as torch_sum)
 
@@ -9,7 +9,7 @@ from torch_geometric.nn.conv.gcn_conv import gcn_norm
 from torch_geometric.typing import Adj, OptTensor
 from torch_sparse import SparseTensor, matmul, fill_diag, sum as torch_sparse_sum, mul as torch_sparse_mul
 
-from basic_message_passing_layer import MessagePassingQuant
+from basic_message_passing_layer import GCNConvQuant
 
 
 def get_inc(edge_index):
@@ -44,11 +44,14 @@ def check_inc(edge_index, inc):
     assert diff < 0.000001, f'error: {diff} need to make sure L=B^TB'
 
 
-class prop_part_QUANT(MessagePassingQuant):
+class prop_part_QUANT(Module):
     _cached_adj_t: Optional[SparseTensor]
     _cached_inc = Optional[SparseTensor]
 
     def __init__(self,
+                 in_channels: int,
+                 hidden_channels: int,
+                 out_channels: int,
                  number_of_layers: int,
                  lambda1: float = None,
                  lambda2: float = None,
@@ -66,7 +69,7 @@ class prop_part_QUANT(MessagePassingQuant):
                  final_out_quantizer=None,
                  embedding_quant=False,
                  **kwargs):
-        super(prop_part_QUANT, self).__init__(aggr='add', message_group_quantizers=message_group_quantizers, **kwargs)
+        super(prop_part_QUANT, self).__init__()
         assert add_self_loops == True and normalize == True, "add_self_loops and normalize should be True"
         self.number_of_layers = number_of_layers
         self.lambda1 = lambda1
@@ -88,9 +91,33 @@ class prop_part_QUANT(MessagePassingQuant):
         self.qtype = qtype
 
         self.out_quantizer = final_out_quantizer
+        self.node_dim = 0
 
         self.alpha_out = Parameter(tensor([1.0], requires_grad=True))
         self.embedding_quant = embedding_quant  # True: store quantized embedding; False: general quantization for node-classification
+
+        self.convs = ModuleList()
+        for i in range(number_of_layers):
+            if i == 0:
+                conv_i = GCNConvQuant(in_channels=out_channels,
+                                      out_channels=out_channels,
+                                      aggr='add',
+                                      message_group_quantizers=message_group_quantizers,
+                                      **kwargs)
+            elif i == number_of_layers - 1:
+                conv_i = GCNConvQuant(in_channels=out_channels,
+                                      out_channels=out_channels,
+                                      aggr='add',
+                                      message_group_quantizers=message_group_quantizers,
+                                      **kwargs)
+            else:
+                conv_i = GCNConvQuant(in_channels=out_channels,
+                                      out_channels=out_channels,
+                                      aggr='add',
+                                      message_group_quantizers=message_group_quantizers,
+                                      **kwargs)
+            self.convs.append(conv_i)
+        self.reset_parameters()
 
     def reset_parameters(self):
         self._cached_adj_t = None
@@ -156,23 +183,23 @@ class prop_part_QUANT(MessagePassingQuant):
         for k in range(number_of_layers):
             layer_rep = (1 - (1 + self.lambda1) * eta_H) * x
 
-            layer_rep_prop, _, _ = self.propagate(self.original_edge_index,
-                                                  x=x,
-                                                  edge_weight=self.edge_weight_transf,
-                                                  size=None,
-                                                  k=k,
-                                                  name="prop")
+            layer_rep_prop = self.convs[k](edge_index=self.original_edge_index,
+                                           x=x,
+                                           edge_weight=self.edge_weight_transf,
+                                           size=None,
+                                           k=k,
+                                           name="prop")
 
             sub_layer_rep = layer_rep + self.lambda1 * eta_H * layer_rep_prop + eta_H * hh
 
             gap_rep = (sub_layer_rep - x)
 
-            gap_rep_prop, _, _ = self.propagate(self.original_edge_index,
-                                                x=gap_rep,
-                                                edge_weight=self.edge_weight_transf,
-                                                size=None,
-                                                k=k,
-                                                name="gap_prop")
+            gap_rep_prop = self.convs[k](edge_index=self.original_edge_index,
+                                         x=gap_rep,
+                                         edge_weight=self.edge_weight_transf,
+                                         size=None,
+                                         k=k,
+                                         name="gap_prop")
 
             y = sub_layer_rep + 2 * eta_H * lambda_list * gap_rep_prop
             s1_list = s1_list + 2 * eta_s1 * lambda_list * s1_list
@@ -185,7 +212,8 @@ class prop_part_QUANT(MessagePassingQuant):
             edge_NUM = nonzero(dense_edge_index).shape
             num_edge = edge_NUM[0]
 
-            lambda_list = lambda_list + self.eta_lambda * (self.alpha_threshold * num_edge - s1_list * s1_list - trace_val_g)
+            lambda_list = lambda_list + self.eta_lambda * (
+                        self.alpha_threshold * num_edge - s1_list * s1_list - trace_val_g)
 
             x = y
             x = F.dropout(x, p=self.dropout, training=self.training)

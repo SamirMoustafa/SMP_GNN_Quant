@@ -226,13 +226,13 @@ def main():
 
             for i in range(9):
                 name = "prop." + str(i + 1) + ".alpha_message"
-                model_orderDict[name] = model.prop.messagegroup_quantizers['prop'][i]['message'].custom_alpha.detach()
+                model_orderDict[name] = model.prop.message_group_quantizers['prop'][i]['message'].custom_alpha.detach()
 
                 name = "prop." + str(i + 1) + ".alpha_aggregate"
-                model_orderDict[name] = model.prop.messagegroup_quantizers['prop'][i]['aggregate'].custom_alpha.detach()
+                model_orderDict[name] = model.prop.message_group_quantizers['prop'][i]['aggregate'].custom_alpha.detach()
 
                 name = "prop." + str(i + 1) + ".alpha_update"
-                model_orderDict[name] = model.prop.messagegroup_quantizers['prop'][i]['update_q'].custom_alpha.detach()
+                model_orderDict[name] = model.prop.message_group_quantizers['prop'][i]['update_q'].custom_alpha.detach()
 
             model_orderDict['lin1.weight'] = {}
             model_orderDict['lin2.weight'] = {}
